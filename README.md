@@ -24,3 +24,7 @@ When you click on a seed in the seed progress pane, you get a list of recipes th
 ![alt text](http://hamusutaa.net/cookie-garden-progress/example_options.png)
 
 When a something happens that you may want to harvest, an alert can be played.
+
+![alt text](http://hamusutaa.net/cookie-garden-progress/example_tooltip.png)
+
+Show chance of getting new plants in empty tiles on the next tick.
