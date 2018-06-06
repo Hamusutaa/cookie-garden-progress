@@ -138,6 +138,7 @@ CGP.plants = {
         chance: 0.001
       }
     ],
+    harvest: true,
     upgrade: 'Bakeberry cookies'
 
   },
@@ -151,7 +152,8 @@ CGP.plants = {
         },
         chance: 0.1
       }
-    ]
+    ],
+    harvest: true
   },
   'whiteChocoroot': {
     generation: 4,
@@ -163,7 +165,8 @@ CGP.plants = {
         },
         chance: 0.1
       }
-    ]
+    ],
+    harvest: true
   },
   'whiteMildew': {
     generation: 3,
@@ -278,11 +281,12 @@ CGP.plants = {
       {
         parents: {
           chocoroot: {},
-          whiteMildew: {}
+          bakeberry: {}
         },
         chance: 0.01
       }
-    ]
+    ],
+    harvest: true
   },
   'queenbeetLump': {
     generation: 5,
@@ -293,7 +297,8 @@ CGP.plants = {
         },
         chance: 0.001
       }
-    ]
+    ],
+    harvest: true
   },
   'duketater': {
     generation: 5,
@@ -305,6 +310,7 @@ CGP.plants = {
         chance: 0.001
       }
     ],
+    harvest: true,
     upgrade: 'Duketater cookies'
   },
   'crumbspore': {
@@ -464,6 +470,8 @@ CGP.ConfigDefault = {
   AlertOnDyingSeed: true,
   AlertOnMatureUpgrade: true,
   AlertOnDyingUpgrade: true,
+  AlertOnMatureHarvest: true,
+  AlertOnDyingHarvest: true,
   AlertSoundURL: 'http://hamusutaa.net/service-bell_daniel_simion.mp3'
 };
 CGP.ConfigPrefix = 'CGPConfig';
@@ -639,6 +647,8 @@ CGP.checkMaturePlants = function () {
         var dying = ((tile[1] + Math.ceil(me.ageTick + me.ageTickR)) >= 100 ? 1 : 0);
         var previousDying = ((previousTile[1] + Math.ceil(me.ageTick + me.ageTickR)) >= 100 ? 1 : 0);
 
+        var harvestable = false;
+
         if (dying) {
           if (CGP.Config.AlertOnDyingSeed && !me.unlocked) {
             messages['Dying ' + me.name + ' can be harvested for a seed!'] = true;
@@ -648,6 +658,10 @@ CGP.checkMaturePlants = function () {
             messages['Dying ' + me.name + ' can be harvested for a chance at ' + upgradeName + '.'] = false;
             alert = alert || !previousDying;
           }
+          if (CGP.Config.AlertOnDyingHarvest && harvestable) {
+            messages['Mature ' + me.name + ' can be harvested for a reward.'] = true;
+            alert = alert || !previousMature;
+          }
         } else {
           if (mature) {
             if (CGP.Config.AlertOnMatureSeed && !me.unlocked) {
@@ -656,6 +670,10 @@ CGP.checkMaturePlants = function () {
             }
             if (CGP.Config.AlertOnMatureUpgrade && upgrade && !upgrade.unlocked) {
               messages['Mature ' + me.name + ' can be harvested for a chance at ' + upgradeName + '.'] = false;
+              alert = alert || !previousMature;
+            }
+            if (CGP.Config.AlertOnMatureHarvest && harvestable) {
+              messages['Mature ' + me.name + ' can be harvested for a reward.'] = true;
               alert = alert || !previousMature;
             }
           }
@@ -726,6 +744,8 @@ CGP.generateMenu = function () {
     html += button('AlertOnDyingSeed', 'Alert on Dying Seed', 'Play a sound when a plant you don\'t have the seed for is about to die.');
     html += button('AlertOnMatureUpgrade', 'Alert on Mature Upgrade', 'Play a sound when a plant you don\'t have the potential upgrade for becomes mature.');
     html += button('AlertOnDyingUpgrade', 'Alert on Dying Upgrade', 'Play a sound when a plant you don\'t have the potential upgrade for is about to die.');
+    html += button('AlertOnMatureHarvest', 'Alert on Mature Harvest', 'Play a sound when a plant that gives a reward when harvested becomes mature.');
+    html += button('AlertOnDyingHarvest', 'Alert on Dying Harvest', 'Play a sound when a plant that gives a reward when harvested is about to die.');
 
     html += '<div class="listing">' +
       '<span class="option">Alert Sound URL: </span>' +
@@ -806,6 +826,72 @@ CGP.onLinkClick = function () {
   }
 };
 
+CGP.newTileTooltip = function (x, y) {
+  return function () {
+    var M = CGP.M;
+    var tile = M.plot[y][x];
+
+    var html = CGP.Backup.tileTooltip(x, y)();
+
+    if (tile[0] == 0) {
+      var statsHtml = '<div class="cgp-chance-list">';
+
+      var muts = CGP.calculateMuts(x, y);
+      var weedMult = M.soilsById[M.soil].weedMult;
+
+      if (muts == null) {
+        var chance = Math.round(0.002 * weedMult * M.plotBoost[y][x][2] * 100000) / 1000;
+        statsHtml += '<div class="cgp-chance-list-item">' + chance + '% chance of becoming a Meddleweed.</div>';
+      } else {
+        for (var i = 0; i < muts.length; i++) {
+          var weedChance = M.plants[muts[i][0]].weed ? weedMult : 1;
+          var weedBoostChance = M.plants[muts[i][0]].weed || M.plants[muts[i][0]].fungus ? M.plotBoost[y][x][2] : 1;
+
+          var chance = Math.round(muts[i][1] * weedChance * weedBoostChance * 100000) / 1000;
+
+          statsHtml += '<div class="cgp-chance-list-item">' + chance + '% chance of becoming a ' +
+            CGP.M.plants[muts[i][0]].name + '.</div>';
+        }
+      }
+
+      statsHtml += '</div>';
+
+      html = html.replace(/<\/div>$/, statsHtml + '</div>');
+    }
+
+    return html;
+  };
+};
+
+CGP.calculateMuts = function (x, y) {
+  var M = CGP.M;
+
+  var any = 0;
+  var neighs = {};//all surrounding plants
+  var neighsM = {};//all surrounding mature plants
+  for (var i in M.plants) {neighs[i] = 0;}
+  for (var i in M.plants) {neighsM[i] = 0;}
+  for (var ix = x - 1; ix <= x + 1; ix++) {
+    for (var iy = y - 1; iy <= y + 1; iy++) {
+      var neigh = M.getTile(ix, iy);
+      if (neigh[0] > 0) {
+        var age = neigh[1];
+        neigh = M.plantsById[neigh[0] - 1];
+        any++;
+        neighs[neigh.key]++;
+        if (age >= neigh.mature) {neighsM[neigh.key]++;}
+      }
+    }
+  }
+  if (any > 0) {
+    return M.getMuts(neighs, neighsM);
+  }
+  else {
+    //weeds in empty tiles (no other plants must be nearby)
+    return null;
+  }
+};
+
 CGP.replaceNative = function () {
   CGP.Backup.Loop = Game.Loop;
   Game.Loop = function () {
@@ -817,6 +903,8 @@ CGP.replaceNative = function () {
     CGP.Backup.UpdateMenu();
     CGP.AddMenu();
   };
+  CGP.Backup.tileTooltip = CGP.M.tileTooltip;
+  CGP.M.tileTooltip = CGP.newTileTooltip;
 };
 
 CGP.DelayInit = function () {
