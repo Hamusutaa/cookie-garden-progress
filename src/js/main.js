@@ -476,7 +476,7 @@ CGP.ConfigDefault = {
 };
 CGP.ConfigPrefix = 'CGPConfig';
 
-CGP.VersionMajor = '2.012';
+CGP.VersionMajor = '2.016';
 CGP.VersionMinor = '1';
 
 CGP.saveConfig = function () {
